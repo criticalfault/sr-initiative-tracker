@@ -18,7 +18,7 @@ const ChromecastButton = ({ content }) => {
   }, []);
 
   useEffect(() => {
-    if (castSession && content.length > 0) {
+    if (castSession && content && content.length > 0) {
       sendMessage(content);
     }
   }, [content, castSession]);
@@ -39,7 +39,7 @@ const ChromecastButton = ({ content }) => {
 
   const sessionListener = (session) => {
     setCastSession(session);
-    if (content.length > 0) {
+    if (content && content.length > 0) {
       sendMessage(content);
     }
   };
@@ -50,20 +50,26 @@ const ChromecastButton = ({ content }) => {
 
   const startCasting = () => {
     if (window.chrome && window.chrome.cast) {
-      window.chrome.cast.requestSession(sessionListener);
+      window.chrome.cast.requestSession(
+        sessionListener,
+        (error) => console.error('Error requesting session:', error)
+      );
     }
   };
 
   const stopCasting = () => {
     if (castSession) {
-      castSession.leave();
-      setCastSession(null);
+      castSession.leave(
+        () => setCastSession(null),
+        (error) => console.error('Error ending session:', error)
+      );
     }
   };
 
   const sendMessage = (content) => {
     if (castSession) {
-      const htmlContent = `
+      // Create a simple HTML page as a data URL
+      const html = `
         <!DOCTYPE html>
         <html>
           <head>
@@ -79,21 +85,38 @@ const ChromecastButton = ({ content }) => {
             <h1>Initiative Order</h1>
             <div id="content"></div>
             <script>
-              const data = ${JSON.stringify(content)};
-              const contentDiv = document.getElementById('content');
-              
-              data.forEach((character) => {
-                const card = document.createElement('div');
-                card.className = 'card' + (character.selected ? ' highlight' : '');
-                card.textContent = character.name + ' - ' + character.initiative;
-                contentDiv.appendChild(card);
-              });
+              try {
+                const data = ${JSON.stringify(content)};
+                const contentDiv = document.getElementById('content');
+                
+                if (data && data.length > 0) {
+                  data.forEach(function(character) {
+                    const card = document.createElement('div');
+                    card.className = 'card' + (character.selected ? ' highlight' : '');
+                    card.textContent = character.name + ' - ' + character.initiative;
+                    contentDiv.appendChild(card);
+                  });
+                } else {
+                  const message = document.createElement('div');
+                  message.textContent = 'No initiative data available';
+                  contentDiv.appendChild(message);
+                }
+              } catch (e) {
+                document.body.innerHTML += '<div>Error: ' + e.message + '</div>';
+              }
             </script>
           </body>
         </html>
       `;
-
-      castSession.sendMessage('urn:x-cast:com.nullsheen.initiativetracker', htmlContent);
+      
+      // Convert HTML to a data URL
+      const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+      
+      // Create a media info object for the default receiver
+      const mediaInfo = new window.chrome.cast.media.MediaInfo(dataUrl, 'text/html');
+      const request = new window.chrome.cast.media.LoadRequest(mediaInfo);
+      
+      castSession.loadMedia(request);
     }
   };
 

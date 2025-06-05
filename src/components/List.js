@@ -16,6 +16,17 @@ export default function List() {
   const [showModal, setShowModal] = useState(false)
   const [selectedCardIndex, setSelectedCardIndex] = useState(null); // State to track the selected card
   const [castableContent, setCastableContent] = useState([]);
+  const [processedList, setProcessedList] = useState([]);
+
+  // Use useEffect to update castableContent when dependencies change
+  useEffect(() => {
+    const castContent = processedList.map((character, index) => ({
+      name: character.name,
+      initiative: character.initiative,
+      selected: index === selectedCardIndex
+    }));
+    setCastableContent(castContent);
+  }, [processedList, selectedCardIndex]);
 
   const handleCardClick = (index) => { // Function to handle card click
     setSelectedCardIndex(index); // Update the selected card index
@@ -133,6 +144,7 @@ export default function List() {
     }
   };
 
+  // Process initiative list without updating state
   const renderInitiativeList = () => {
     let originalList = InitiativeList.slice();
     let finalList = [];
@@ -166,17 +178,17 @@ export default function List() {
         return b.initiative - a.initiative;
       });
     }
-
-    // Update castable content for Chromecast
-    const castContent = finalList.map((character, index) => ({
-      name: character.name,
-      initiative: character.initiative,
-      selected: index === selectedCardIndex
-    }));
-    setCastableContent(castContent);
-
+    
+    // Update the processed list state (will trigger useEffect)
+    setProcessedList(finalList);
+    
     return finalList;
   };
+
+  // Use useEffect to process the initiative list when dependencies change
+  useEffect(() => {
+    renderInitiativeList();
+  }, [InitiativeList, EditionSwitch, ConditionMonitorsEffectInitiative]);
 
   const onConfirmDel = (type, param, id) => {
     if (type === 'yes') {
@@ -192,7 +204,7 @@ export default function List() {
       </>)
     }
   }
-
+  
   return (
     <>
       <nav className="pv3 ph3 ph4-ns" role="navigation" style={{ "background": "black" }}>
@@ -301,7 +313,7 @@ export default function List() {
                 <h2>Initiative Order</h2>
                 <ChromecastButton content={castableContent} />
               </div>
-              {renderInitiativeList(InitiativeList).map((character, index) => {
+              {processedList.map((character, index) => {
                 const cardStyles = selectedCardIndex === index ?
                   { width: '18rem', margin: '2px auto', backgroundColor: 'rgb(0, 169, 256)', cursor: 'pointer' } : // Highlighted style
                   { width: '18rem', margin: '2px auto', cursor: 'pointer' }; // Default style

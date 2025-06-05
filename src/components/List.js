@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Container, InputGroup, Card, Form, Button, Col, Row, Modal } from 'react-bootstrap';
 import ConditionMonitor from './ConditionMonitor/ConditionMonitor';
 import ButtonConfirm from './ButtonConfirm';
+import ChromecastButton from './ChromecastButton';
 import './List.css';
 
 let nextId = 0;
@@ -14,9 +15,10 @@ export default function List() {
   const [InitiativeList, setInitiativeList] = useState(initialList);
   const [showModal, setShowModal] = useState(false)
   const [selectedCardIndex, setSelectedCardIndex] = useState(null); // State to track the selected card
+  const [castableContent, setCastableContent] = useState([]);
 
   const handleCardClick = (index) => { // Function to handle card click
-      setSelectedCardIndex(index); // Update the selected card index
+    setSelectedCardIndex(index); // Update the selected card index
   };
 
   const handleModalClose = () => {
@@ -27,47 +29,47 @@ export default function List() {
     setShowModal(true);
   };
 
-  const  handleSaveProject = (event) => {
-    let systemJSON =JSON.stringify(InitiativeList);
+  const handleSaveProject = (event) => {
+    let systemJSON = JSON.stringify(InitiativeList);
     const blob = new Blob([systemJSON], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-  
+
     // Create a link element and trigger the download
     const link = document.createElement('a');
     link.href = url;
     link.download = 'InitativeList.json';
     link.click();
-  
+
     // Clean up by revoking the object URL
     URL.revokeObjectURL(url);
     let Edition = '2nd';
-    if(EditionSwitch){
+    if (EditionSwitch) {
       Edition = '3rd';
     }
-    fathom.trackEvent('Saved Initiative for '+Edition); // eslint-disable-line
+    fathom.trackEvent('Saved Initiative for ' + Edition); // eslint-disable-line
   }
 
-const handleLoadProject = (event) => {
+  const handleLoadProject = (event) => {
     const file = event.target.files[0];
     const reader = new FileReader();
     reader.onload = (e) => {
-        const fileData = e.target.result;
-        let inits = JSON.parse(fileData);
-        setInitiativeList(inits);
-        nextId = inits.length;
-        setShowModal(false);
-        fathom.trackEvent('Loaded Initiative'); // eslint-disable-line
-    }    
-    reader.readAsText(file); 
+      const fileData = e.target.result;
+      let inits = JSON.parse(fileData);
+      setInitiativeList(inits);
+      nextId = inits.length;
+      setShowModal(false);
+      fathom.trackEvent('Loaded Initiative'); // eslint-disable-line
+    }
+    reader.readAsText(file);
   }
 
   const handleChangeInitiative = (event) => {
     const { value, dataset } = event.target;
     const { key } = dataset;
-    
+
     setInitiativeList((prevState) =>
       prevState.map((actor) =>
-        actor.id === parseInt(key) ? { ...actor, initiative: value } : {...actor}
+        actor.id === parseInt(key) ? { ...actor, initiative: value } : { ...actor }
       )
     );
   };
@@ -85,25 +87,25 @@ const handleLoadProject = (event) => {
   }
 
   const handleConditionSelect = (number, type, reset, key) => {
-    if(reset === true){
+    if (reset === true) {
       applyInitiativePenalty(0, type, key);
-    }else{
+    } else {
       const penalty = getInitiativePenalty(number);
       applyInitiativePenalty(penalty, type, key);
     }
   }
 
   const applyInitiativePenalty = (penalty, type, key) => {
-    if(type === 'P') {
+    if (type === 'P') {
       setInitiativeList((prevList) =>
         prevList.map((actor) => (
-          actor.id+'P' === key ? { ...actor, PPenalty: penalty } : {...actor}
+          actor.id + 'P' === key ? { ...actor, PPenalty: penalty } : { ...actor }
         ))
       );
-    }else if(type === 'S') {
+    } else if (type === 'S') {
       setInitiativeList((prevList) =>
         prevList.map((actor) => (
-          actor.id+'S' === key ? { ...actor, SPenalty: penalty } : {...actor}
+          actor.id + 'S' === key ? { ...actor, SPenalty: penalty } : { ...actor }
         ))
       );
     }
@@ -138,55 +140,62 @@ const handleLoadProject = (event) => {
     originalList.sort(function (a, b) {
       return b.initiative - a.initiative;
     });
-  
+
     while (originalList.length > 0) {
       let tempInitHolder = { ...originalList.shift() };
-      if(ConditionMonitorsEffectInitiative){
-        if(!tempInitHolder.hasOwnProperty('skipWoundPhase') || tempInitHolder.hasOwnProperty('skipWoundPhase') !== true){
+      if (ConditionMonitorsEffectInitiative) {
+        if (!tempInitHolder.hasOwnProperty('skipWoundPhase') || tempInitHolder.hasOwnProperty('skipWoundPhase') !== true) {
           tempInitHolder.initiative = parseInt(tempInitHolder.initiative) + parseInt(tempInitHolder.SPenalty) + parseInt(tempInitHolder.PPenalty);
-        }else{
+        } else {
           tempInitHolder.initiative = parseInt(tempInitHolder.initiative);
         }
-      }else{
+      } else {
         tempInitHolder.initiative = parseInt(tempInitHolder.initiative);
       }
-     
-      finalList.push({...tempInitHolder});
+
+      finalList.push({ ...tempInitHolder });
       tempInitHolder.initiative -= 10;
-      if(tempInitHolder.initiative > 0) {
+      if (tempInitHolder.initiative > 0) {
         tempInitHolder.skipWoundPhase = true;
         originalList.push(tempInitHolder);
       }
     }
-  
-    if(!EditionSwitch){
+
+    if (!EditionSwitch) {
       finalList.sort(function (a, b) {
         return b.initiative - a.initiative;
       });
     }
-    return finalList;
 
+    // Update castable content for Chromecast
+    const castContent = finalList.map((character, index) => ({
+      name: character.name,
+      initiative: character.initiative,
+      selected: index === selectedCardIndex
+    }));
+    setCastableContent(castContent);
+
+    return finalList;
   };
 
-  const onConfirmDel = (type, param, id) =>
-  {
-    if(type === 'yes') {
+  const onConfirmDel = (type, param, id) => {
+    if (type === 'yes') {
       setInitiativeList(InitiativeList.filter((a) => a.id !== id));
     }
   }
 
-  const ConditionMonitorsToRender = (actor) =>{
-    if(ShowConditionMonitors){
-      return ( <>
-                <ConditionMonitor type="S" key={actor.id+'S'} targetID={actor.id+'S'} onConditionSelect={handleConditionSelect} />
-                <ConditionMonitor type="P" key={actor.id+'P'} targetID={actor.id+'P'} onConditionSelect={handleConditionSelect} />
-              </>)
+  const ConditionMonitorsToRender = (actor) => {
+    if (ShowConditionMonitors) {
+      return (<>
+        <ConditionMonitor type="S" key={actor.id + 'S'} targetID={actor.id + 'S'} onConditionSelect={handleConditionSelect} />
+        <ConditionMonitor type="P" key={actor.id + 'P'} targetID={actor.id + 'P'} onConditionSelect={handleConditionSelect} />
+      </>)
     }
   }
-  
+
   return (
     <>
-      <nav className="pv3 ph3 ph4-ns" role="navigation" style={{"background":"black"}}>
+      <nav className="pv3 ph3 ph4-ns" role="navigation" style={{ "background": "black" }}>
         <div className="flex-l justify-between items-center center">
           <a href="/" className="f3 fw2 hover-white no-underline white-90 dib">NullSheen Shadowrun Tools</a>
           <div className="flex-l items-center">
@@ -213,50 +222,50 @@ const handleLoadProject = (event) => {
       <Container>
         <Row>
           <Col>
-          
-            <Button className='saveButton' onClick={handleSaveProject}>Save Order</Button>              
+
+            <Button className='saveButton' onClick={handleSaveProject}>Save Order</Button>
             <Button className='loadButton' onClick={handleModalOpen}  >Load Order</Button>
             <br></br>
             <Modal show={showModal} onHide={handleModalClose}>
-                <Modal.Header closeButton>
-                    <Modal.Title>Upload initive List</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <input type="file" accept=".json" onChange={handleLoadProject} />
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={handleModalClose}>
-                        Close
-                    </Button>
-                    <Button variant="primary" onClick={handleModalClose}>
-                        Upload
-                    </Button>
-                </Modal.Footer>
+              <Modal.Header closeButton>
+                <Modal.Title>Upload initive List</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <input type="file" accept=".json" onChange={handleLoadProject} />
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={handleModalClose}>
+                  Close
+                </Button>
+                <Button variant="primary" onClick={handleModalClose}>
+                  Upload
+                </Button>
+              </Modal.Footer>
             </Modal>
             <h1>Actors:</h1>
             <Form><span>SR2</span>
-                <Form.Check
-                    value={EditionSwitch}
-                    type="switch"
-                    onChange={handleChangeEdition}
-                /><span>SR3</span>
+              <Form.Check
+                value={EditionSwitch}
+                type="switch"
+                onChange={handleChangeEdition}
+              /><span>SR3</span>
             </Form>
             <Form><span>Show Condition Monitors</span>
-                <Form.Check
-                    defaultChecked={ShowConditionMonitors} 
-                    value={ShowConditionMonitors}
-                    type="switch"
-                    onChange={handleShowConditionMonitors}
-                />
+              <Form.Check
+                defaultChecked={ShowConditionMonitors}
+                value={ShowConditionMonitors}
+                type="switch"
+                onChange={handleShowConditionMonitors}
+              />
             </Form>
             <Form><span>Condition Monitors Effect Initiative</span>
-                <Form.Check
-                    defaultChecked={ConditionMonitorsEffectInitiative}
-                    value={ConditionMonitorsEffectInitiative}
-                    type="switch"
-                    onChange={handleConditionMonitorsEffectInitiative}
-                />
-            </Form> 
+              <Form.Check
+                defaultChecked={ConditionMonitorsEffectInitiative}
+                value={ConditionMonitorsEffectInitiative}
+                type="switch"
+                onChange={handleConditionMonitorsEffectInitiative}
+              />
+            </Form>
             <hr />
             <InputGroup className="mb-2">
               <Form.Control id="newName" />
@@ -265,7 +274,7 @@ const handleLoadProject = (event) => {
                   let name = document.getElementById('newName').value;
                   setInitiativeList([
                     ...InitiativeList,
-                    {"id": nextId++, "name": name, "initiative": 1, "PPenalty":0, "SPenalty":0}
+                    { "id": nextId++, "name": name, "initiative": 1, "PPenalty": 0, "SPenalty": 0 }
                   ]);
                 }}
               >
@@ -276,7 +285,7 @@ const handleLoadProject = (event) => {
               <Card style={{ width: '21rem', margin: '2px auto' }} key={actor.id} >
                 <Card.Body>
                   <Card.Title>
-                    {actor.name}: <input value={actor.initiative} style={{width:'100px'}} onChange={handleChangeInitiative} data-key={actor.id} type="number" />  <ButtonConfirm onConfirm={onConfirmDel} targetID={actor.id}  title="Delete" query="Are you sure...?"  />
+                    {actor.name}: <input value={actor.initiative} style={{ width: '100px' }} onChange={handleChangeInitiative} data-key={actor.id} type="number" />  <ButtonConfirm onConfirm={onConfirmDel} targetID={actor.id} title="Delete" query="Are you sure...?" />
                   </Card.Title>
                   SPenalty:{actor.SPenalty}  PPenalty:{actor.PPenalty}
                   {
@@ -288,18 +297,22 @@ const handleLoadProject = (event) => {
           </Col>
           <Col>
             <div>
-              <h2>Initiative Order</h2>
-              {renderInitiativeList(InitiativeList).map((character, index) =>{  
-                const cardStyles = selectedCardIndex === index ? 
-                { width: '18rem', margin: '2px auto', backgroundColor: 'rgb(0, 169, 256)', cursor: 'pointer' } : // Highlighted style
-                { width: '18rem', margin: '2px auto', cursor: 'pointer' }; // Default style
-                return(
-                <Card style={cardStyles} key={index} onClick={() => handleCardClick(index)}>
-                  <Card.Body >
-                    <Card.Title>{character.name} - {character.initiative}</Card.Title>
-                  </Card.Body>
-                </Card>
-              )})}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h2>Initiative Order</h2>
+                <ChromecastButton content={castableContent} />
+              </div>
+              {renderInitiativeList(InitiativeList).map((character, index) => {
+                const cardStyles = selectedCardIndex === index ?
+                  { width: '18rem', margin: '2px auto', backgroundColor: 'rgb(0, 169, 256)', cursor: 'pointer' } : // Highlighted style
+                  { width: '18rem', margin: '2px auto', cursor: 'pointer' }; // Default style
+                return (
+                  <Card style={cardStyles} key={index} onClick={() => handleCardClick(index)}>
+                    <Card.Body >
+                      <Card.Title>{character.name} - {character.initiative}</Card.Title>
+                    </Card.Body>
+                  </Card>
+                )
+              })}
             </div>
           </Col>
         </Row>

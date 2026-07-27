@@ -44,7 +44,6 @@ export default function List() {
     if(EditionSwitch){
       Edition = '3rd';
     }
-    fathom.trackEvent('Saved Initiative for '+Edition); // eslint-disable-line
   }
 
 const handleLoadProject = (event) => {
@@ -56,8 +55,7 @@ const handleLoadProject = (event) => {
         setInitiativeList(inits);
         nextId = inits.length;
         setShowModal(false);
-        fathom.trackEvent('Loaded Initiative'); // eslint-disable-line
-    }    
+    }
     reader.readAsText(file); 
   }
 
